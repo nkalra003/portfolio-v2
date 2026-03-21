@@ -1689,6 +1689,7 @@
         let formListenerAdded = false; // Prevent duplicate event listeners
         let performanceChart = null; // Chart.js instance
         let selectedTimePeriod = '24h'; // Default time period
+        let lastSnapshotTime = 0; // Track last snapshot timestamp to throttle saves
 
         // Initialize on load
         document.addEventListener('DOMContentLoaded', async function() {
@@ -3055,9 +3056,19 @@
 
         /**
          * Save a historical snapshot of the current portfolio value to Firestore
+         * Throttled to save max once every 30 minutes to avoid Firebase quota limits
          */
         async function saveHistoricalSnapshot() {
             if (!firebaseEnabled || !currentUser) return;
+
+            // Throttle: Only save once every 30 minutes (1,800,000 ms)
+            const now = Date.now();
+            const thirtyMinutes = 30 * 60 * 1000; // 30 minutes in milliseconds
+            
+            if (now - lastSnapshotTime < thirtyMinutes) {
+                console.log(`⏭️ Skipping snapshot (last saved ${Math.round((now - lastSnapshotTime) / 60000)} minutes ago)`);
+                return;
+            }
 
             try {
                 // Calculate current total value
@@ -3072,7 +3083,7 @@
 
                 const snapshot = {
                     value: totalValue,
-                    timestamp: Date.now(),
+                    timestamp: now,
                     date: new Date().toISOString()
                 };
 
@@ -3081,6 +3092,7 @@
                     .collection('history').doc(snapshot.timestamp.toString())
                     .set(snapshot);
 
+                lastSnapshotTime = now; // Update last snapshot time
                 console.log(`📸 Saved snapshot: $${totalValue.toFixed(2)} at ${new Date(snapshot.timestamp).toLocaleString()}`);
             } catch (error) {
                 console.error('Error saving snapshot:', error);
