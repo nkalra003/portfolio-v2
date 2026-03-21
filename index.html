@@ -1454,23 +1454,6 @@
 
                 <div class="portfolio-summary" id="portfolioSummary"></div>
 
-                <!-- Performance Chart -->
-                <div class="performance-chart-container" id="performanceChartContainer" style="display: none;">
-                    <div class="chart-header">
-                        <div class="chart-title">Portfolio Performance</div>
-                        <div class="time-period-buttons">
-                            <button class="time-period-btn active" data-period="24h" onclick="changeChartPeriod('24h')">24h</button>
-                            <button class="time-period-btn" data-period="7d" onclick="changeChartPeriod('7d')">7d</button>
-                            <button class="time-period-btn" data-period="30d" onclick="changeChartPeriod('30d')">30d</button>
-                            <button class="time-period-btn" data-period="90d" onclick="changeChartPeriod('90d')">90d</button>
-                            <button class="time-period-btn" data-period="all" onclick="changeChartPeriod('all')">All</button>
-                        </div>
-                    </div>
-                    <div class="chart-canvas-container">
-                        <canvas id="performanceChart"></canvas>
-                    </div>
-                </div>
-
                 <div class="table-container">
                     <table>
                         <thead>
@@ -1497,6 +1480,23 @@
                         <button class="btn btn-primary" onclick="openModal()">
                             <span>+</span> Add Position
                         </button>
+                    </div>
+                </div>
+
+                <!-- Performance Chart -->
+                <div class="performance-chart-container" id="performanceChartContainer" style="display: none;">
+                    <div class="chart-header">
+                        <div class="chart-title">Portfolio Performance</div>
+                        <div class="time-period-buttons">
+                            <button class="time-period-btn active" data-period="24h" onclick="changeChartPeriod('24h')">24h</button>
+                            <button class="time-period-btn" data-period="7d" onclick="changeChartPeriod('7d')">7d</button>
+                            <button class="time-period-btn" data-period="30d" onclick="changeChartPeriod('30d')">30d</button>
+                            <button class="time-period-btn" data-period="90d" onclick="changeChartPeriod('90d')">90d</button>
+                            <button class="time-period-btn" data-period="all" onclick="changeChartPeriod('all')">All</button>
+                        </div>
+                    </div>
+                    <div class="chart-canvas-container">
+                        <canvas id="performanceChart"></canvas>
                     </div>
                 </div>
             </div>
