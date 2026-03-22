@@ -2640,6 +2640,9 @@
                     console.log(`✅ Successfully loaded ${portfolio.length} positions from Firestore`);
                     renderPortfolio();
                     
+                    // Clean up old historical snapshots (keep last 7 days only)
+                    cleanupOldSnapshots();
+                    
                     // Refresh prices for loaded portfolio
                     if (portfolio.length > 0) {
                         await refreshPortfolioPrices();
@@ -3096,6 +3099,50 @@
                 console.log(`📸 Saved snapshot: $${totalValue.toFixed(2)} at ${new Date(snapshot.timestamp).toLocaleString()}`);
             } catch (error) {
                 console.error('Error saving snapshot:', error);
+            }
+        }
+
+        /**
+         * Clean up old historical snapshots (keep last 7 days only)
+         * This prevents database bloat and quota issues
+         */
+        async function cleanupOldSnapshots() {
+            if (!firebaseEnabled || !currentUser) return;
+
+            try {
+                const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
+                
+                // Query for snapshots older than 7 days
+                const oldSnapshots = await db.collection('users').doc(currentUser.uid)
+                    .collection('history')
+                    .where('timestamp', '<', sevenDaysAgo)
+                    .get();
+
+                if (oldSnapshots.empty) {
+                    console.log('🧹 No old snapshots to clean up');
+                    return;
+                }
+
+                // Delete in batches (Firestore batch limit is 500)
+                const batch = db.batch();
+                let deleteCount = 0;
+
+                oldSnapshots.forEach(doc => {
+                    batch.delete(doc.ref);
+                    deleteCount++;
+                });
+
+                if (deleteCount > 0) {
+                    await batch.commit();
+                    console.log(`🧹 Cleaned up ${deleteCount} old snapshots (older than 7 days)`);
+                }
+            } catch (error) {
+                // Silently fail if quota exceeded - will retry next time
+                if (error.code === 'resource-exhausted') {
+                    console.log('⏳ Quota exceeded, will clean up old snapshots after reset');
+                } else {
+                    console.error('Error cleaning up snapshots:', error);
+                }
             }
         }
 
