@@ -1501,6 +1501,199 @@
                     </div>
                 </div>
             </div>
+
+            <!-- ============ PROFIT-TAKING PRICE SIMULATOR ============ -->
+            <style>
+                .pts-section { padding: 30px; background: var(--bg-primary); border-top: 1px solid var(--border-color); }
+                .pts-card { background: var(--bg-secondary); border-radius: 12px; padding: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+                [data-theme="dark"] .pts-card { box-shadow: 0 2px 8px rgba(0,0,0,0.3); }
+                .pts-subtitle { color: var(--text-secondary); font-size: 14px; margin-bottom: 20px; line-height: 1.5; }
+                .pts-asset-tabs { display: flex; gap: 10px; margin-bottom: 22px; flex-wrap: wrap; }
+                .pts-asset-tab { padding: 10px 24px; border: 2px solid var(--border-color); background: var(--bg-primary); color: var(--text-secondary);
+                    border-radius: 8px; cursor: pointer; font-size: 15px; font-weight: 600; transition: all 0.2s ease; display: flex; align-items: center; gap: 8px; }
+                .pts-asset-tab.active[data-asset="BTC"] { background: linear-gradient(135deg, #f7931a 0%, #ffb347 100%); color: #fff; border-color: transparent; box-shadow: 0 2px 8px rgba(247,147,26,0.35); }
+                .pts-asset-tab.active[data-asset="ETH"] { background: linear-gradient(135deg, #627eea 0%, #8aa0f5 100%); color: #fff; border-color: transparent; box-shadow: 0 2px 8px rgba(98,126,234,0.35); }
+                .pts-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 16px; margin-bottom: 8px; }
+                .pts-field label { display: block; margin-bottom: 8px; font-weight: 600; color: var(--text-primary); font-size: 13px; }
+                .pts-field label small { color: var(--text-secondary); font-weight: 400; }
+                .pts-field input { width: 100%; padding: 12px; border: 2px solid var(--border-color); border-radius: 6px; font-size: 15px;
+                    background: var(--bg-primary); color: var(--text-primary); transition: border-color 0.3s; }
+                .pts-field input:focus { outline: none; border-color: #1e3c72; }
+                .pts-field.pts-output input { background: var(--bg-secondary); font-weight: 700; color: #16c784; cursor: default; }
+                .pts-actions { display: flex; gap: 10px; margin: 18px 0 24px; flex-wrap: wrap; }
+                .pts-results { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; }
+                .pts-result-card { color: #fff; padding: 20px; border-radius: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+                .pts-result-card.blue { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+                .pts-result-card.green { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); }
+                .pts-result-card.gold { background: linear-gradient(135deg, #f7931a 0%, #ffb347 100%); }
+                .pts-result-card.slate { background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); }
+                .pts-result-label { font-size: 12px; opacity: 0.9; margin-bottom: 6px; }
+                .pts-result-value { font-size: 26px; font-weight: bold; word-break: break-word; }
+                .pts-result-sub { font-size: 12px; opacity: 0.85; margin-top: 4px; }
+                @media (max-width: 768px) { .pts-section { padding: 20px; } .pts-results { grid-template-columns: 1fr; } }
+            </style>
+            <div class="pts-section">
+                <div class="section-header">
+                    <h2 class="section-title">🎯 Profit-Taking Price Simulator</h2>
+                </div>
+                <div class="pts-card">
+                    <p class="pts-subtitle">
+                        Select an asset, then plug in your numbers. Enter a <strong>purchase price</strong> plus either the
+                        <strong>expected gains (×)</strong> or a target <strong>profit-taking price</strong> — the missing one is
+                        calculated automatically. Add an optional amount invested to see your total $ value and profit.
+                        <br><em>Example: BTC bought at 60,000 × 3 = profit-taking price of 180,000.</em>
+                    </p>
+
+                    <div class="pts-asset-tabs" id="ptsAssetTabs">
+                        <div class="pts-asset-tab" data-asset="BTC" onclick="ptsSelectAsset('BTC')"><span>₿</span> BTC</div>
+                        <div class="pts-asset-tab" data-asset="ETH" onclick="ptsSelectAsset('ETH')"><span>Ξ</span> ETH</div>
+                    </div>
+
+                    <div class="pts-grid">
+                        <div class="pts-field">
+                            <label for="ptsBuy">Purchase Price <small>(bottom, USD)</small></label>
+                            <input type="number" id="ptsBuy" placeholder="e.g. 60000" step="any" min="0">
+                        </div>
+                        <div class="pts-field">
+                            <label for="ptsGain">Expected Gains <small>(× multiple)</small></label>
+                            <input type="number" id="ptsGain" placeholder="e.g. 3" step="any" min="0">
+                        </div>
+                        <div class="pts-field pts-output">
+                            <label for="ptsTarget">Profit-Taking Price <small>(top, USD)</small></label>
+                            <input type="number" id="ptsTarget" placeholder="e.g. 180000" step="any" min="0">
+                        </div>
+                        <div class="pts-field">
+                            <label for="ptsInvest">Amount Invested <small>(optional, USD)</small></label>
+                            <input type="number" id="ptsInvest" placeholder="e.g. 10000" step="any" min="0">
+                        </div>
+                    </div>
+
+                    <div class="pts-actions">
+                        <button type="button" class="btn btn-secondary" onclick="ptsReset()">↺ Reset</button>
+                    </div>
+
+                    <div class="pts-results" id="ptsResults">
+                        <div class="pts-result-card gold">
+                            <div class="pts-result-label" id="ptsSellLabel">Profit-Taking Price</div>
+                            <div class="pts-result-value" id="ptsSellValue">—</div>
+                            <div class="pts-result-sub" id="ptsSellSub">Enter purchase price + gains</div>
+                        </div>
+                        <div class="pts-result-card slate">
+                            <div class="pts-result-label">Gains Multiple</div>
+                            <div class="pts-result-value" id="ptsMultValue">—</div>
+                            <div class="pts-result-sub" id="ptsMultSub">target ÷ purchase</div>
+                        </div>
+                        <div class="pts-result-card blue">
+                            <div class="pts-result-label">Total Value at Target</div>
+                            <div class="pts-result-value" id="ptsTotalValue">—</div>
+                            <div class="pts-result-sub" id="ptsTotalSub">amount invested × multiple</div>
+                        </div>
+                        <div class="pts-result-card green">
+                            <div class="pts-result-label">Net Profit</div>
+                            <div class="pts-result-value" id="ptsProfitValue">—</div>
+                            <div class="pts-result-sub" id="ptsProfitSub">total value − invested</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <script>
+                (function () {
+                    var pts = { asset: 'BTC' };
+                    var buyEl, gainEl, targetEl, investEl;
+
+                    function fmtMoney(n) {
+                        if (!isFinite(n)) return '—';
+                        var dp = Math.abs(n) < 10 ? 4 : 2;
+                        return '$' + n.toLocaleString('en-US', { minimumFractionDigits: dp <= 2 ? 2 : 0, maximumFractionDigits: dp });
+                    }
+
+                    window.ptsSelectAsset = function (asset) {
+                        pts.asset = asset;
+                        document.querySelectorAll('#ptsAssetTabs .pts-asset-tab').forEach(function (t) {
+                            t.classList.toggle('active', t.getAttribute('data-asset') === asset);
+                        });
+                        ptsRecalc();
+                    };
+
+                    function num(el) {
+                        var v = parseFloat(el.value);
+                        return isFinite(v) && v > 0 ? v : NaN;
+                    }
+
+                    function ptsRecalc() {
+                        var buy = num(buyEl), gain = num(gainEl), target = num(targetEl), invest = num(investEl);
+                        var sym = pts.asset;
+
+                        // Derive the missing value between gain and target (needs purchase price).
+                        if (isFinite(buy)) {
+                            if (isFinite(gain)) {
+                                target = buy * gain;
+                                targetEl.value = Number(target.toFixed(2));
+                            } else if (isFinite(target)) {
+                                gain = target / buy;
+                                gainEl.value = Number(gain.toFixed(4));
+                            }
+                        }
+
+                        var sellCard = document.getElementById('ptsSellValue');
+                        var multCard = document.getElementById('ptsMultValue');
+                        var totalCard = document.getElementById('ptsTotalValue');
+                        var profitCard = document.getElementById('ptsProfitValue');
+
+                        // Profit-taking (target) price — the final price, last result.
+                        if (isFinite(target)) {
+                            sellCard.textContent = fmtMoney(target);
+                            document.getElementById('ptsSellSub').textContent = isFinite(buy)
+                                ? sym + ' ' + fmtMoney(buy) + ' → ' + fmtMoney(target) : 'per 1 ' + sym;
+                        } else {
+                            sellCard.textContent = '—';
+                            document.getElementById('ptsSellSub').textContent = 'Enter purchase price + gains';
+                        }
+
+                        // Gains multiple + ROI.
+                        if (isFinite(gain)) {
+                            multCard.textContent = gain.toFixed(2).replace(/\.00$/, '') + '×';
+                            document.getElementById('ptsMultSub').textContent = '+' + ((gain - 1) * 100).toFixed(1) + '% ROI';
+                        } else {
+                            multCard.textContent = '—';
+                            document.getElementById('ptsMultSub').textContent = 'target ÷ purchase';
+                        }
+
+                        // Total $ value + net profit (needs amount invested).
+                        if (isFinite(invest) && isFinite(gain)) {
+                            var totalValue = invest * gain;
+                            var profit = totalValue - invest;
+                            totalCard.textContent = fmtMoney(totalValue);
+                            document.getElementById('ptsTotalSub').textContent = fmtMoney(invest) + ' invested';
+                            profitCard.textContent = fmtMoney(profit);
+                            document.getElementById('ptsProfitSub').textContent = '+' + ((gain - 1) * 100).toFixed(1) + '% gain';
+                        } else {
+                            totalCard.textContent = '—';
+                            document.getElementById('ptsTotalSub').textContent = 'amount invested × multiple';
+                            profitCard.textContent = '—';
+                            document.getElementById('ptsProfitSub').textContent = 'total value − invested';
+                        }
+                    }
+                    window.ptsRecalc = ptsRecalc;
+
+                    window.ptsReset = function () {
+                        buyEl.value = ''; gainEl.value = ''; targetEl.value = ''; investEl.value = '';
+                        ptsRecalc();
+                    };
+
+                    document.addEventListener('DOMContentLoaded', function () {
+                        buyEl = document.getElementById('ptsBuy');
+                        gainEl = document.getElementById('ptsGain');
+                        targetEl = document.getElementById('ptsTarget');
+                        investEl = document.getElementById('ptsInvest');
+                        [buyEl, gainEl, targetEl, investEl].forEach(function (el) {
+                            el.addEventListener('input', ptsRecalc);
+                        });
+                        ptsSelectAsset('BTC');
+                    });
+                })();
+            </script>
+            <!-- ============ END PROFIT-TAKING PRICE SIMULATOR ============ -->
         </div>
     </div>
 
