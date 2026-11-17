@@ -755,6 +755,114 @@
             font-size: 14px;
         }
 
+        /* Allocation Pie Chart */
+        .allocation-container {
+            background: var(--bg-primary);
+            border-radius: 12px;
+            padding: 20px;
+            margin-top: 25px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        [data-theme="dark"] .allocation-container {
+            background: var(--bg-secondary);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+        }
+
+        .allocation-body {
+            display: grid;
+            grid-template-columns: minmax(260px, 380px) 1fr;
+            gap: 30px;
+            align-items: center;
+        }
+
+        .allocation-canvas-wrap {
+            position: relative;
+            width: 100%;
+            max-width: 380px;
+            aspect-ratio: 1 / 1;
+            margin: 0 auto;
+        }
+
+        .allocation-center {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            pointer-events: none;
+            text-align: center;
+        }
+
+        .allocation-center-label {
+            font-size: 12px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .allocation-center-value {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .allocation-legend {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .allocation-legend-row {
+            display: grid;
+            grid-template-columns: 14px 1fr auto;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 12px;
+            border-radius: 8px;
+            border-bottom: 1px solid var(--border-color);
+            font-size: 14px;
+        }
+
+        .allocation-legend-row:last-child {
+            border-bottom: none;
+        }
+
+        .allocation-legend-row:hover {
+            background: var(--bg-secondary);
+        }
+
+        .allocation-swatch {
+            width: 14px;
+            height: 14px;
+            border-radius: 4px;
+        }
+
+        .allocation-symbol {
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .allocation-sub {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-left: 6px;
+            font-weight: 400;
+        }
+
+        .allocation-value {
+            font-weight: 700;
+            color: var(--text-primary);
+            font-variant-numeric: tabular-nums;
+        }
+
+        @media (max-width: 768px) {
+            .allocation-body {
+                grid-template-columns: 1fr;
+            }
+        }
+
         /* Table */
         .table-container {
             overflow-x: auto;
@@ -1500,6 +1608,27 @@
                         <canvas id="performanceChart"></canvas>
                     </div>
                 </div>
+
+                <!-- Asset Allocation Pie Chart -->
+                <div class="allocation-container" id="allocationContainer" style="display: none;">
+                    <div class="chart-header">
+                        <div class="chart-title">Asset Allocation</div>
+                        <div class="time-period-buttons">
+                            <button class="time-period-btn alloc-mode-btn active" data-mode="percent" onclick="setAllocationMode('percent')">%  Percentage</button>
+                            <button class="time-period-btn alloc-mode-btn" data-mode="value" onclick="setAllocationMode('value')">$  Market Value</button>
+                        </div>
+                    </div>
+                    <div class="allocation-body">
+                        <div class="allocation-canvas-wrap">
+                            <canvas id="allocationChart"></canvas>
+                            <div class="allocation-center">
+                                <div class="allocation-center-label" id="allocationCenterLabel">Total</div>
+                                <div class="allocation-center-value" id="allocationCenterValue">--</div>
+                            </div>
+                        </div>
+                        <div class="allocation-legend" id="allocationLegend"></div>
+                    </div>
+                </div>
             </div>
 
             <!-- ============ PROFIT-TAKING PRICE SIMULATOR ============ -->
@@ -1885,6 +2014,8 @@
         let lastSnapshotTime = 0; // Track last snapshot timestamp to throttle saves
         let historicalDataCache = null; // Cache historical data to avoid repeated Firestore reads
         let lastHistoricalFetch = 0; // Track when we last fetched historical data
+        let allocationChart = null; // Chart.js doughnut instance
+        let allocationMode = 'percent'; // 'percent' | 'value'
 
         // Initialize on load
         document.addEventListener('DOMContentLoaded', async function() {
@@ -2085,6 +2216,9 @@
             if (performanceChart && portfolio.length > 0) {
                 renderPerformanceChart(selectedTimePeriod);
             }
+            if (allocationChart) {
+                renderAllocationChart();
+            }
         }
 
         // Listen for system theme changes
@@ -2094,6 +2228,9 @@
                 // Re-render chart with new theme colors
                 if (performanceChart && portfolio.length > 0) {
                     renderPerformanceChart(selectedTimePeriod);
+                }
+                if (allocationChart) {
+                    renderAllocationChart();
                 }
             }
         });
@@ -2451,15 +2588,17 @@
                     const meta = result.meta;
                     const quotes = result.indicators?.quote?.[0];
                     
-                    let currentPrice = meta.regularMarketPrice;
-                    let previousClose = meta.chartPreviousClose || meta.previousClose;
-                    
-                    // If regular market price not available, use last close
-                    if (!currentPrice && quotes?.close) {
-                        const closes = quotes.close.filter(c => c !== null);
-                        currentPrice = closes[closes.length - 1];
-                        previousClose = closes[closes.length - 2] || currentPrice;
-                    }
+                    const closes = (quotes?.close || []).filter(c => c !== null && c !== undefined);
+                    let currentPrice = meta.regularMarketPrice || closes[closes.length - 1];
+
+                    // Previous close = the prior trading day's close.
+                    // (With range=2d, chartPreviousClose is the close BEFORE the 2-day window,
+                    //  i.e. two days ago — so prefer the real previous close first.)
+                    let previousClose = meta.regularMarketPreviousClose
+                        || meta.previousClose
+                        || (closes.length >= 2 ? closes[closes.length - 2] : null)
+                        || meta.chartPreviousClose
+                        || currentPrice;
                     
                     if (currentPrice) {
                         const change = currentPrice - previousClose;
@@ -3162,6 +3301,7 @@
                 tbody.innerHTML = '';
                 emptyState.style.display = 'block';
                 renderSummary(0, 0, 0);
+                renderAllocationChart();
                 return;
             }
 
@@ -3181,9 +3321,11 @@
                 const totalGainLoss = marketValue - cost;
                 const totalGainLossPercent = (totalGainLoss / cost * 100);
                 
-                // Day's gain based on YOUR purchase price (not market's previous close)
-                const personalDayChange = currentPrice - purchasePrice;
-                const dayGain = quantity * personalDayChange;
+                // Day's gain = today's move vs. the previous close (24h ago for crypto).
+                // If the position was bought today, measure from the purchase price instead.
+                const boughtToday = isToday(item.buyDate);
+                const dayBase = boughtToday ? purchasePrice : previousClose;
+                const dayGain = quantity * (currentPrice - dayBase);
                 
                 totalValue += marketValue;
                 totalCost += cost;
@@ -3218,9 +3360,155 @@
 
             const totalGainLoss = totalValue - totalCost;
             renderSummary(totalValue, totalDayGain, totalGainLoss);
-            
+
+            // Render allocation pie chart
+            renderAllocationChart();
+
             // Render performance chart
             renderPerformanceChart(selectedTimePeriod);
+        }
+
+        // ============================================================================
+        // ASSET ALLOCATION PIE CHART
+        // ============================================================================
+
+        const ALLOCATION_COLORS = {
+            BTC: '#f7931a',
+            ETH: '#627eea',
+            SOL: '#14f195',
+            MSTR: '#d62828',
+            IBIT: '#1e3c72',
+            MSBT: '#00a3e0'
+        };
+        const ALLOCATION_PALETTE = [
+            '#667eea', '#11998e', '#f45c43', '#ffb347', '#8e44ad',
+            '#16a085', '#e84393', '#2d98da', '#20bf6b', '#a55eea', '#fd9644', '#778ca3'
+        ];
+
+        /** Group positions by symbol (multiple lots of the same asset become one slice). */
+        function getAllocationData() {
+            const bySymbol = {};
+            portfolio.forEach(item => {
+                const price = item.currentPrice || item.purchasePrice || 0;
+                const value = (item.quantity || 0) * price;
+                if (value <= 0) return;
+                if (!bySymbol[item.symbol]) {
+                    bySymbol[item.symbol] = { symbol: item.symbol, name: item.name, value: 0 };
+                }
+                bySymbol[item.symbol].value += value;
+            });
+
+            const rows = Object.values(bySymbol).sort((a, b) => b.value - a.value);
+            const total = rows.reduce((sum, r) => sum + r.value, 0);
+            let paletteIndex = 0;
+            rows.forEach(r => {
+                r.percent = total > 0 ? (r.value / total) * 100 : 0;
+                r.color = ALLOCATION_COLORS[r.symbol] || ALLOCATION_PALETTE[paletteIndex++ % ALLOCATION_PALETTE.length];
+            });
+            return { rows, total };
+        }
+
+        function formatAllocation(row) {
+            return allocationMode === 'percent'
+                ? `${formatNumber(row.percent, 2)}%`
+                : `$${formatNumber(row.value, 2)}`;
+        }
+
+        function renderAllocationChart() {
+            const container = document.getElementById('allocationContainer');
+            const canvas = document.getElementById('allocationChart');
+            if (!container || !canvas) return;
+
+            const { rows, total } = getAllocationData();
+
+            if (rows.length === 0) {
+                container.style.display = 'none';
+                if (allocationChart) {
+                    allocationChart.destroy();
+                    allocationChart = null;
+                }
+                return;
+            }
+            container.style.display = 'block';
+
+            // Center label: total value in $ mode, number of assets in % mode
+            document.getElementById('allocationCenterLabel').textContent =
+                allocationMode === 'percent' ? 'Assets' : 'Total Value';
+            document.getElementById('allocationCenterValue').textContent =
+                allocationMode === 'percent' ? `${rows.length}` : `$${formatNumber(total, 0)}`;
+
+            // Legend list (largest first)
+            document.getElementById('allocationLegend').innerHTML = rows.map(r => `
+                <div class="allocation-legend-row">
+                    <span class="allocation-swatch" style="background:${r.color}"></span>
+                    <span class="allocation-symbol">${r.symbol}<span class="allocation-sub">${r.name && r.name !== r.symbol ? r.name : ''}</span></span>
+                    <span class="allocation-value">${formatAllocation(r)}</span>
+                </div>
+            `).join('');
+
+            const isDarkTheme = document.body.getAttribute('data-theme') === 'dark';
+            const textColor = isDarkTheme ? '#e0e0e0' : '#333';
+            const borderColor = isDarkTheme ? '#2d2d2d' : '#ffffff';
+
+            const chartData = {
+                labels: rows.map(r => r.symbol),
+                datasets: [{
+                    data: rows.map(r => r.value),
+                    backgroundColor: rows.map(r => r.color),
+                    borderColor: borderColor,
+                    borderWidth: 2,
+                    hoverOffset: 8
+                }]
+            };
+
+            const tooltipLabel = (context) => {
+                const r = rows[context.dataIndex];
+                if (!r) return '';
+                return allocationMode === 'percent'
+                    ? ` ${r.symbol}: ${formatNumber(r.percent, 2)}%  ($${formatNumber(r.value, 2)})`
+                    : ` ${r.symbol}: $${formatNumber(r.value, 2)}  (${formatNumber(r.percent, 2)}%)`;
+            };
+
+            // Update in place if the chart exists, otherwise create it
+            if (allocationChart) {
+                allocationChart.data.labels = chartData.labels;
+                Object.assign(allocationChart.data.datasets[0], chartData.datasets[0]);
+                allocationChart.options.plugins.tooltip.callbacks.label = tooltipLabel;
+                allocationChart.options.plugins.tooltip.backgroundColor = isDarkTheme ? 'rgba(45, 45, 45, 0.95)' : 'rgba(255, 255, 255, 0.95)';
+                allocationChart.options.plugins.tooltip.titleColor = textColor;
+                allocationChart.options.plugins.tooltip.bodyColor = textColor;
+                allocationChart.update('none'); // instant redraw, no re-spin on toggle/refresh
+                return;
+            }
+
+            allocationChart = new Chart(canvas.getContext('2d'), {
+                type: 'doughnut',
+                data: chartData,
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    cutout: '58%',
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: isDarkTheme ? 'rgba(45, 45, 45, 0.95)' : 'rgba(255, 255, 255, 0.95)',
+                            titleColor: textColor,
+                            bodyColor: textColor,
+                            borderColor: isDarkTheme ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)',
+                            borderWidth: 1,
+                            callbacks: { label: tooltipLabel }
+                        }
+                    }
+                }
+            });
+        }
+
+        function setAllocationMode(mode) {
+            allocationMode = mode;
+            document.querySelectorAll('.alloc-mode-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.mode === mode);
+            });
+            renderAllocationChart();
         }
 
         function renderSummary(totalValue, dayGain, totalGainLoss) {
@@ -3445,7 +3733,9 @@
             // Fetch historical data
             const historicalData = await fetchHistoricalData(period);
 
-            // If no historical data, show a message
+            // If no historical data, show a message (keep the canvas so later renders still work)
+            const canvasWrap = canvas.parentElement;
+            let emptyMsg = canvasWrap.querySelector('.chart-loading');
             if (historicalData.length === 0) {
                 // Destroy existing chart
                 if (performanceChart) {
@@ -3453,10 +3743,18 @@
                     performanceChart = null;
                 }
 
-                // Show message
-                canvas.parentElement.innerHTML = '<div class="chart-loading">No historical data yet. Data will appear as your portfolio is tracked over time.</div>';
+                canvas.style.display = 'none';
+                if (!emptyMsg) {
+                    emptyMsg = document.createElement('div');
+                    emptyMsg.className = 'chart-loading';
+                    emptyMsg.textContent = 'No historical data yet. Data will appear as your portfolio is tracked over time.';
+                    canvasWrap.appendChild(emptyMsg);
+                }
+                emptyMsg.style.display = 'flex';
                 return;
             }
+            canvas.style.display = 'block';
+            if (emptyMsg) emptyMsg.style.display = 'none';
 
             // Prepare data for Chart.js
             const labels = historicalData.map(d => {
@@ -3483,7 +3781,7 @@
             }
 
             // Get theme colors
-            const isDarkTheme = document.documentElement.getAttribute('data-theme') === 'dark';
+            const isDarkTheme = document.body.getAttribute('data-theme') === 'dark';
             const textColor = isDarkTheme ? '#e0e0e0' : '#333';
             const gridColor = isDarkTheme ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)';
             const lineColor = isPositive ? '#38ef7d' : '#f45c43';
@@ -3598,6 +3896,14 @@
                 minimumFractionDigits: decimals,
                 maximumFractionDigits: decimals
             });
+        }
+
+        // True if a YYYY-MM-DD buy date is today's local date
+        function isToday(dateString) {
+            if (!dateString) return false;
+            const d = new Date();
+            const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+            return dateString === today;
         }
 
         function formatDate(dateString) {
